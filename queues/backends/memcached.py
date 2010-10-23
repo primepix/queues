@@ -7,6 +7,7 @@ This backend requires either the memcache or cmemcache libraries to be installed
 from queues.backends.base import BaseQueue
 from queues import InvalidBackend, QueueException
 import os, re
+from uuid import uuid1
 
 try:
     from cmemcache import Client
@@ -14,6 +15,7 @@ try:
 except ImportError:
     try:
         from memcache import Client
+        import memcache
     except:
         raise InvalidBackend("Unable to import a memcache library.")
 
@@ -32,25 +34,43 @@ class Queue(BaseQueue):
         self._connection = Client(CONN.split(';'))
         self.backend = 'memcached'
         self.name = name
+        self._connection.set('%s_head' % self.name, None)
+        self._connection.set('%s_len' % self.name, 0)
 
     def read(self):
         try:
-            return self._connection.get(self.name)
-        except (memcache.MemcachedKeyError, MemcachedStringEncodingError), e:
-            raise QueueException, e
+            _head = self._connection.get('%s_head' % self.name)
+            if _head:
+                value, _next = self._connection.get('%s_%s' % (self.name, _head))
+                length = self._connection.get('%s_len' % self.name)
+                self._connection.set('%s_len' % self.name, length - 1)
+                self._connection.delete('%s_%s' % (self.name, _head))
+                self._connection.set('%s_head' % self.name, _next)
+                return value
+            else:
+                return None
+        except Exception as e:
+            raise e
 
     def write(self, message):
         try:
-            return self._connection.set(self.name, message, 0)
-        except (memcache.MemcachedKeyError, MemcachedStringEncodingError), e:
-            raise QueueException, e
+            _head = self._connection.get('%s_head' % self.name)
+            _label = str(uuid1())
+            _node_value = (message, _head)
+            self._connection.set('%s_%s' % (self.name, _label), _node_value)
+            length = self._connection.get('%s_len' % self.name)
+            self._connection.set('%s_len' % self.name, length + 1)
+            self._connection.set('%s_head' % self.name, _label)
+            return True
+        except Exception as e:
+            raise e
 
     def __len__(self):
         try:
             try:
-                return int(self._connection.get_stats()[0][1]['queue_%s_items' % self.name])
-            except (memcache.MemcachedKeyError, MemcachedStringEncodingError), e:
-                raise QueueException, e
+                return self._connection.get('%s_len' % self.name)
+            except Exception as e:
+                raise e
         except AttributeError:
             # If this memcached backend doesn't support starling-style stats
             # or if this queue doesn't exist
