@@ -11,7 +11,6 @@ from uuid import uuid1
 
 try:
     from cmemcache import Client
-    
 except ImportError:
     try:
         from memcache import Client
@@ -29,7 +28,6 @@ if not CONN:
     raise InvalidBackend("QUEUE_MEMCACHE_CONNECTION not set.")
 
 class Queue(BaseQueue):
-    
     def __init__(self, name):
         self._connection = Client(CONN.split(';'))
         self.backend = 'memcached'
@@ -49,8 +47,8 @@ class Queue(BaseQueue):
                 return value
             else:
                 return None
-        except Exception as e:
-            raise e
+        except Exception:
+            pass
 
     def write(self, message):
         try:
@@ -62,15 +60,15 @@ class Queue(BaseQueue):
             self._connection.set('%s_len' % self.name, length + 1)
             self._connection.set('%s_head' % self.name, _label)
             return True
-        except Exception as e:
-            raise e
+        except Exception:
+            pass
 
     def __len__(self):
         try:
             try:
                 return self._connection.get('%s_len' % self.name)
-            except Exception as e:
-                raise e
+            except Exception:
+                pass
         except AttributeError:
             # If this memcached backend doesn't support starling-style stats
             # or if this queue doesn't exist
