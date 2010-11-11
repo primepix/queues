@@ -45,8 +45,14 @@ class Queue(BaseQueue):
         self._connection = FileBasedSpool(SPOOL)
         self.backend = 'filebased'
         self.name = name
-        self._connection.set('%s_head' % self.name, None)
-        self._connection.set('%s_len' % self.name, 0)
+        try:
+            _head = self._connection.get('%s_head' % self.name)
+        except:
+            self._connection.set('%s_head' % self.name, None)
+        try:
+            _len = self._connection.get('%s_len' % self.name)
+        except:
+            self._connection.set('%s_len' % self.name, 0)
 
     def read(self):
         try:
